@@ -1,0 +1,236 @@
+#!/bin/sh
+
+#############################################################################
+# Version 0.1.0-DEVELOPMENT (24-04-2022)
+#############################################################################
+
+#############################################################################
+# Copyright 2021-2022 Nozel/Sebas Veeke. Licenced under a Creative Commons
+# Attribution-NonCommercial-ShareAlike 4.0 International License.
+#
+# See https://creativecommons.org/licenses/by-nc-sa/4.0/
+#
+# Contact:
+# > e-mail      mail@nozel.org
+# > GitHub      nozel-org
+#############################################################################
+
+#############################################################################
+# VARIABLES
+#############################################################################
+
+# uptimebot version
+UPTIMEBOT_VERSION='0.1.0'
+
+# check whether uptimebot.conf is available and source it
+if [ -f /usr/local/etc/uptimebot.conf ]; then
+    . /usr/local/etc/uptimebot.conf
+else
+    VAR=""
+fi
+
+####################################################################################################
+# ARGUMENT HANDLING
+####################################################################################################
+
+# populate validation variables with zeros for validation
+ARGUMENT_OPTION='0'
+ARGUMENT_VERSION='0'
+ARGUMENT_HELP='0'
+ARGUMENT_FEATURE='0'
+ARGUMENT_METHOD='0'
+ARGUMENT_CLI='0'
+ARGUMENT_TELEGRAM='0'
+
+# watch arguments
+while test -n "$1"; do
+    case "$1" in
+        # options
+        --version|-version|version|--v|-v)
+            ARGUMENT_VERSION='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+
+        --help|-help|help|--h|-h)
+            ARGUMENT_HELP='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+        
+        --cron|-cron|cron)
+            ARGUMENT_CRON='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+
+        # features
+        --server|server)
+            ARGUMENT_SERVER='1'
+            ARGUMENT_FEATURE='1'
+            shift
+            ;;
+
+        # methods
+        --cli|cli|c)
+            ARGUMENT_CLI='1'
+            ARGUMENT_METHOD='1'
+            shift
+            ;;
+
+        --telegram|telegram|t)
+            ARGUMENT_TELEGRAM='1'
+            ARGUMENT_METHOD='1'
+            shift
+            ;;
+
+        # other
+        *)
+            ARGUMENT_NONE='1'
+            shift
+            ;;
+    esac
+done
+
+
+####################################################################################################
+# ERROR FUNCTIONS
+####################################################################################################
+
+error_invalid_argument() {
+    printf "uptimebot: invalid argument used.\nUse 'uptimebot --help' for a list of valid arguments.\n"
+    exit 1
+}
+error_more_than_one_feature() {
+    printf "uptimebot: only one uptimebot feature can be used at a time.\nUse 'uptimebot --help' for a list of valid arguments.\n"
+    exit 1
+}
+
+error_more_than_one_method() {
+    printf "uptimebot: only one uptimebot method can be used at a time.\nUse 'uptimebot --help' for a list of valid arguments.\n"
+    exit 1
+}
+
+error_method_not_supported() {
+    printf "uptimebot: the chosen method isn't supported for the chosen feature.\n"
+    exit 1
+}
+
+####################################################################################################
+# REQUIREMENT FUNCTIONS
+####################################################################################################
+
+uptimebot_argument_validate() {
+    # combine argument categories
+    ARGUMENT_FEATURES_COMBINED="$((1+1))"
+    ARGUMENT_METHOD_COMBINED="$((ARGUMENT_CLI + ARGUMENT_TELEGRAM))"
+
+    if [ "${ARGUMENT_NONE}" = '1' ]; then
+        error_invalid_argument
+    # validate amount of selected features and return error when more than 1 feature is selected
+    elif [ "${ARGUMENT_FEATURES_COMBINED}" -gt '1' ]; then
+        error_more_than_one_feature
+    # validate amount of selected methods and return error when more than 1 feature is selected
+    elif [ "${ARGUMENT_METHOD_COMBINED}" -gt '1' ]; then
+        error_more_than_one_method
+    fi
+}
+
+####################################################################################################
+# GENERAL FUNCTIONS
+####################################################################################################
+
+option_version() {
+    printf "Uptimebot %s\n" "${UPTIMEBOT_VERSION}"
+    printf "Copyright (C) 2021-2022 Nozel.\n"
+    printf "License CC Attribution-NonCommercial-ShareAlike 4.0 Int.\n\n"
+    printf "Written by Sebas Veeke\n"
+
+    # exit when done
+    exit 0
+}
+
+option_help() {
+    printf "Usage:\n"
+    printf " uptimebot [feature]... [method]...\n"
+    printf " uptimebot [option]...\n\n"
+    printf "Features:\n"
+    printf " --server               Basic server information\n"
+    printf "Methods:\n"
+    printf " --cli (default)        Output [feature] to command line\n"
+    printf " --telegram             Output [feature] to Telegram\n\n"
+    printf "Options:\n"
+    printf " --cron                 Effectuate cron changes from uptimebot config\n"
+    printf " --help                 Display this help and exit\n"
+    printf " --version              Display version information and exit\n"
+
+    # exit when done
+    exit 0
+}
+
+option_cron() {
+    printf "[1] Removing old uptimebot cronjob\n"
+    rm -f /etc/cron.d/uptimebot
+
+    # exit when done
+    exit 0
+}
+
+####################################################################################################
+# GATHER FUNCTIONS
+####################################################################################################
+
+gather_metrics_server() {
+    FREEBSD_VERSION="$(freebsd-version)"
+    HOSTNAME="$(uname -n)"
+    OPERATING_SYSTEM="$(uname -o)"
+    KERNEL_NAME="$(uname -s)"
+    KERNEL_VERSION="$(uname -r)"
+    ARCHITECTURE="$(uname -m)"
+}
+
+####################################################################################################
+# FEATURE FUNCTIONS
+####################################################################################################
+
+
+
+####################################################################################################
+# METHOD FUNCTIONS
+####################################################################################################
+
+method_telegram() {
+    # create payload for Telegram
+    TELEGRAM_PAYLOAD="chat_id=${TELEGRAM_CHAT}&text=${TELEGRAM_MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    # sent payload to Telegram API and exit
+    curl --silent --max-time 10 --retry 5 --retry-delay 2 --retry-max-time 10 -d "${TELEGRAM_PAYLOAD}" "${TELEGRAM_URL}" > /dev/null 2>&1 &
+}
+
+####################################################################################################
+# MAIN FUNCTIONS
+####################################################################################################
+
+uptimebot_main() {
+    # validate arguments
+    uptimebot_argument_validate
+
+    # when both a feature and method cli are given
+    # method cli is the default method, so even when no method is given method cli is used
+    if [ "${ARGUMENT_CRON}" = '1' ]; then
+        option_cron
+    elif [ "${ARGUMENT_VERSION}" = '1' ]; then
+        option_version
+    elif [ "${ARGUMENT_HELP}" = '1' ]; then
+        option_help
+    # the overview is shown when no arguments were given
+    else
+        feature_overview_cli
+    fi
+}
+
+####################################################################################################
+# CALL MAIN FUNCTION
+####################################################################################################
+
+uptimebot_main
