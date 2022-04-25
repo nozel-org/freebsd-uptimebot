@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #############################################################################
-# Version 1.0.0-RELEASE (24-04-2022)
+# Version 1.1.0-RELEASE (25-04-2022)
 #############################################################################
 
 #############################################################################
@@ -20,13 +20,14 @@
 #############################################################################
 
 # uptimebot version
-UPTIMEBOT_VERSION='1.0.0'
+UPTIMEBOT_VERSION='1.1.0'
 
 # check whether uptimebot.conf is available and source it
 if [ -f /usr/local/etc/uptimebot.conf ]; then
     # populate all usable variables to have defaults and check validity later on
     UPTIMEBOT_LOG='0'
     UPTIMEBOT_DATABASE='0'
+    UPTIMEBOT_DELAY='0'
     PING_LOGONLY='0'
     PING_TELEGRAM='0'
     PORT_LOGONLY='0'
@@ -54,6 +55,9 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
     fi
     if [ "${UPTIMEBOT_DATABASE}" == '0' ]; then
         UPTIMEBOT_DATABASE="/usr/local/etc/uptimebot_targets.conf"
+    fi
+    if [ "${UPTIMEBOT_DELAY}" == '0' ]; then
+        UPTIMEBOT_DELAY='0.5'
     fi
     if [ "${PING_LOGONLY}" == '0' ]; then
         PING_LOGONLY='NO'
@@ -100,6 +104,7 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
 else
     UPTIMEBOT_LOG="/var/log/uptimebot.log"
     UPTIMEBOT_DATABASE='/usr/local/etc/uptimebot_targets.conf'
+    UPTIMEBOT_DELAY='0.5'
 fi
 
 ####################################################################################################
@@ -386,6 +391,9 @@ option_cron() {
 # SUPPORT FUNCTIONS
 ####################################################################################################
 
+slow_down() {
+    sleep "${UPTIMEBOT_DELAY}"
+}
 check_ip_version() {
     if [ "${1}" != "${1#*[0-9].[0-9]}" ]; then
   		IP_VERSION='4'
@@ -399,13 +407,13 @@ check_ip_version() {
 send_error_to_log() {
     DATE="$(date +%Y-%m-%d)"
     TIME="$(date +%H:%M:%S)"
-    printf "[${DATE}][${TIME}][service down] ${1} ${2}\n" >> ${UPTIMEBOT_LOG}
+    printf "[${DATE}][${TIME}][ERROR]${1} ${2} ${3}\n" >> ${UPTIMEBOT_LOG}
 }
 
 send_error_to_telegram() {
     DATE="$(date +%Y-%m-%d)"
     TIME="$(date +%H:%M:%S)"
-    TELEGRAM_MESSAGE="$(printf "Service down\n[${1}] <code>${2}</code>")"
+    TELEGRAM_MESSAGE="$(printf "<b>Outage</b> ${1}\n<code>${2}</code>\n<code>${3}</code>")"
     method_telegram
 }
 
@@ -425,8 +433,8 @@ feature_ping_list() {
 
 	if [ "${PROTOCOL_PING}" -eq '1' ]; then
         DIVIDER="============================================================================="
-		HEADER="\n %-6s %-5s %-36s\n"
-        FORMAT=" %-6s %-5s %-36s\n"
+		HEADER="\n %-6s %-36s\n"
+        FORMAT=" %-6s %-36s\n"
         WIDTH="77"
 
         printf "${HEADER}" "PING" "IP ADDRESS"
@@ -436,32 +444,43 @@ feature_ping_list() {
             if [ "$(echo ${line} | awk '{print $1;}')" == 'ping' ]; then
                 IP_ADDRESS="$(echo ${line} | awk '{print $2;}')"
 				check_ip_version ${IP_ADDRESS}
-                printf "${FORMAT}" "ping" "IPv${IP_VERSION}" "${IP_ADDRESS}"
+                printf "${FORMAT}" "IPv${IP_VERSION}" "${IP_ADDRESS}"
             fi
         done < ${UPTIMEBOT_DATABASE}
     fi
 }
 
 feature_port_list() {
-    PROTOCOL_PORT='0'
+    PROTOCOL_PORT4='0'
+    PROTOCOL_PORT6='0'
 
 	while read line; do
-        if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
-            PROTOCOL_PORT='1'
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+            PROTOCOL_PORT4='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+            PROTOCOL_PORT6='1'
         fi
     done < ${UPTIMEBOT_DATABASE}
 
-    if [ "${PROTOCOL_PORT}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
         DIVIDER="============================================================================="
-		HEADER="\n %-6s %-5s\n"
-        FORMAT=" %-6s %-5s\n"
+		HEADER="\n %-6s %-36s\n"
+        FORMAT=" %-6s %-36s\n"
         WIDTH="77"
 
-        printf "${HEADER}" "PORT" "IP ADDRESS"
+        printf "${HEADER}" "PORT" "HOST"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 
         while read line; do
-            if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+                HOST="$(echo ${line} | awk '{print $2;}')"
+                PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
+				printf "${FORMAT}" "${PORT_NUMBER}" "${HOST}"
+            fi
+        done < ${UPTIMEBOT_DATABASE}
+        while read line; do
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
 				printf "${FORMAT}" "${PORT_NUMBER}" "${HOST}"
@@ -480,18 +499,12 @@ feature_http_list() {
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
             PROTOCOL_HTTP4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
             PROTOCOL_HTTP6='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
             PROTOCOL_HTTPS4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
             PROTOCOL_HTTPS6='1'
         fi
@@ -500,16 +513,16 @@ feature_http_list() {
 	if [ "${PROTOCOL_HTTP4}" -eq '1' ] || [ "${PROTOCOL_HTTP6}" -eq '1' ] || \
 	[ "${PROTOCOL_HTTPS4}" -eq '1' ] || [ "${PROTOCOL_HTTPS6}" -eq '1' ]; then
         DIVIDER="============================================================================="
-        HEADER="\n %-6s %-5s %-36s %-4s\n"
-        FORMAT=" %-6s %-5s %-36s %-4s\n"
+        HEADER="\n %-6s %-36s\n"
+        FORMAT=" %-6s %-36s\n"
         WIDTH="77"
-        printf "${HEADER}" "HTTP" "IP" "DOMAIN NAME" "STATUS CODE"
+        printf "${HEADER}" "HTTP" "HOST"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
         if [ "${PROTOCOL_HTTP4}" -eq '1' ]; then
             while read line; do
                 if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
                     DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
-                    printf "${FORMAT}" "http" "IPv4" "http://${DOMAIN_NAME}" "${STATUS_CODE}"
+                    printf "${FORMAT}" "IPv4" "http://${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -517,7 +530,7 @@ feature_http_list() {
             while read line; do
                 if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
                     DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
-                    printf "${FORMAT}" "http" "IPv6" "https://${DOMAIN_NAME}" "${STATUS_CODE}"
+                    printf "${FORMAT}" "IPv6" "https://${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -525,7 +538,7 @@ feature_http_list() {
             while read line; do
                 if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
                     DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
-                    printf "${FORMAT}" "https" "IPv4" "http://${DOMAIN_NAME}" "${STATUS_CODE}"
+                    printf "${FORMAT}" "IPv4" "http://${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -533,7 +546,7 @@ feature_http_list() {
             while read line; do
                 if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
                     DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
-                    printf "${FORMAT}" "https" "IPv6" "https://${DOMAIN_NAME}" "${STATUS_CODE}"
+                    printf "${FORMAT}" "IPv6" "https://${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -545,30 +558,40 @@ feature_dns_list() {
     PROTOCOL_DNS_AAAA='0'
 	PROTOCOL_DNS_CNAME='0'
     PROTOCOL_DNS_TXT='0'
+    PROTOCOL_DNS_MX='0'
+    PROTOCOL_DNS_NS='0'
+    PROTOCOL_DNS_SOA='0'
+    PROTOCOL_DNS_PTR='0'
 
 	while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
             PROTOCOL_DNS_A='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
             PROTOCOL_DNS_AAAA='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
             PROTOCOL_DNS_CNAME='1'
         fi
-	done < ${UPTIMEBOT_DATABASE}
-	while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
             PROTOCOL_DNS_TXT='1'
         fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+            PROTOCOL_DNS_MX='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+            PROTOCOL_DNS_NS='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+            PROTOCOL_DNS_SOA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+            PROTOCOL_DNS_PTR='1'
+        fi
     done < ${UPTIMEBOT_DATABASE}
 
-	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || \
-	[ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ]; then
+	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || [ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ] || \
+	[ "${PROTOCOL_DNS_MX}" -eq '1' ] || [ "${PROTOCOL_DNS_NS}" -eq '1' ] || [ "${PROTOCOL_DNS_SOA}" -eq '1' ] || [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
         DIVIDER="============================================================================="
         HEADER="\n %-6s %-36s %-36s\n"
         FORMAT=" %-6s %-36s %-36s\n"
@@ -608,6 +631,42 @@ feature_dns_list() {
                     DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
                     ENTRY="$(echo ${line} | awk '{print $3;}')"
                     printf "${FORMAT}" "TXT" "${DOMAIN_NAME}" "${ENTRY}"
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_MX}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    ENTRY="$(echo ${line} | awk '{print $3;}')"
+                    printf "${FORMAT}" "MX" "${DOMAIN_NAME}" "${ENTRY}"
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_NS}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    ENTRY="$(echo ${line} | awk '{print $3;}')"
+                    printf "${FORMAT}" "NS" "${DOMAIN_NAME}" "${ENTRY}"
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_SOA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    ENTRY="$(echo ${line} | awk '{print $3;}')"
+                    printf "${FORMAT}" "SOA" "${DOMAIN_NAME}" "${ENTRY}"
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    ENTRY="$(echo ${line} | awk '{print $3;}')"
+                    printf "${FORMAT}" "PTR" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -665,52 +724,62 @@ feature_ping_logonly() {
 
 	if [ "${PROTOCOL_PING}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'ping' ]; then
+                slow_down
                 IP_ADDRESS="$(echo ${line} | awk '{print $2;}')"
 				check_ip_version ${IP_ADDRESS}
 				if [ "${IP_VERSION}" -eq '4' ]; then
 					if ! ping -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping -q -c1 ${IP_ADDRESS} > /dev/null 2>&1; then
-                            send_error_to_log ping ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv4]" "${IP_ADDRESS}"
                         fi
                     fi
                 elif [ "${IP_VERSION}" -eq '6' ]; then
 					if ! ping6 -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping6 -q -c1 ${IP_ADDRESS} > /dev/null 2>&1; then
-                            send_error_to_log ping ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv6]" "${IP_ADDRESS}"
                         fi
                     fi
 				fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_port_logonly() {
-    PROTOCOL_PORT='0'
+    PROTOCOL_PORT4='0'
+    PROTOCOL_PORT6='0'
 
 	while read line; do
-        if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
-            PROTOCOL_PORT='1'
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+            PROTOCOL_PORT4='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+            PROTOCOL_PORT6='1'
         fi
     done < ${UPTIMEBOT_DATABASE}
 
-	if [ "${PROTOCOL_PORT}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
-            if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
-                if ! nc -zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
-                    send_error_to_log port "${HOST}:${PORT_NUMBER}"
+                if ! nc -4zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv4]" "${HOST}:${PORT_NUMBER}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
+        while read line; do
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+                slow_down
+                HOST="$(echo ${line} | awk '{print $2;}')"
+                PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
+                if ! nc -6zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv6]" "${HOST}:${PORT_NUMBER}"
+                fi
+            fi
+        done < ${UPTIMEBOT_DATABASE}
     fi
 }
 
@@ -724,18 +793,12 @@ feature_http_logonly() {
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
             PROTOCOL_HTTP4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
             PROTOCOL_HTTP6='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
             PROTOCOL_HTTPS4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
             PROTOCOL_HTTPS6='1'
         fi
@@ -744,56 +807,189 @@ feature_http_logonly() {
 	if [ "${PROTOCOL_HTTP4}" -eq '1' ] || [ "${PROTOCOL_HTTP6}" -eq '1' ] || \
 	[ "${PROTOCOL_HTTPS4}" -eq '1' ] || [ "${PROTOCOL_HTTPS6}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "http://${HOST}"
+                    send_error_to_log "[HTTP][IPv4]" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "http://${HOST}"
+                    send_error_to_log "[HTTP][IPv6]" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv4]" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv6]" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_dns_logonly() {
-	echo 'wip'
+	PROTOCOL_DNS_A='0'
+    PROTOCOL_DNS_AAAA='0'
+	PROTOCOL_DNS_CNAME='0'
+    PROTOCOL_DNS_TXT='0'
+    PROTOCOL_DNS_MX='0'
+    PROTOCOL_DNS_NS='0'
+    PROTOCOL_DNS_SOA='0'
+    PROTOCOL_DNS_PTR='0'
+
+	while read line; do
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+            PROTOCOL_DNS_A='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+            PROTOCOL_DNS_AAAA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+            PROTOCOL_DNS_CNAME='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+            PROTOCOL_DNS_TXT='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+            PROTOCOL_DNS_MX='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+            PROTOCOL_DNS_NS='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+            PROTOCOL_DNS_SOA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+            PROTOCOL_DNS_PTR='1'
+        fi
+    done < ${UPTIMEBOT_DATABASE}
+
+	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || [ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ] || \
+	[ "${PROTOCOL_DNS_MX}" -eq '1' ] || [ "${PROTOCOL_DNS_NS}" -eq '1' ] || [ "${PROTOCOL_DNS_SOA}" -eq '1' ] || [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+		if [ "${PROTOCOL_DNS_A}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t a ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        DNS_VALUE="$(host -t a ${DOMAIN_NAME})"
+                        send_error_to_log "[DNS][A]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_AAAA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t aaaa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][AAAA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_CNAME}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t cname ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][CNAME]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_TXT}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t txt ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][TXT]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_MX}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t mx ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][MX]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_NS}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ns ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][NS]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_SOA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t soa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][SOA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ptr ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][PTR]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+    fi
 }
 
 feature_tls_logonly() {
-	echo 'wip'
+	echo ''
 }
 
 feature_tor_logonly() {
-	echo 'wip'
+	echo ''
 }
 
 feature_all_logonly() {
@@ -823,15 +1019,15 @@ feature_ping_cli() {
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'ping' ]; then
+                slow_down
                 IP_ADDRESS="$(echo ${line} | awk '{print $2;}')"
 				check_ip_version ${IP_ADDRESS}
 				if [ "${IP_VERSION}" -eq '4' ]; then
 					if ! ping -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                             printf "${FORMAT}" "[!]" "DOWN" "IPv4" "${IP_ADDRESS}"
-                            send_error_to_log ping ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv4]" ${IP_ADDRESS}
                         fi
                     else
                         printf "${FORMAT}" "[i]" "UP" "IPv4" "${IP_ADDRESS}"
@@ -840,7 +1036,7 @@ feature_ping_cli() {
 					if ! ping6 -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping6 -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                             printf "${FORMAT}" "[!]" "DOWN" "IPv6" "${IP_ADDRESS}"
-                            send_error_to_log ping ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv6]" ${IP_ADDRESS}
                         fi
                     else
                         printf "${FORMAT}" "[i]" "UP" "IPv6" "${IP_ADDRESS}"
@@ -848,21 +1044,23 @@ feature_ping_cli() {
 				fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_port_cli() {
-    PROTOCOL_PORT='0'
+    PROTOCOL_PORT4='0'
+    PROTOCOL_PORT6='0'
 
 	while read line; do
-        if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
-            PROTOCOL_PORT='1'
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+            PROTOCOL_PORT4='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+            PROTOCOL_PORT6='1'
         fi
     done < ${UPTIMEBOT_DATABASE}
 
-	if [ "${PROTOCOL_PORT}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
         DIVIDER="============================================================================="
         HEADER="\n %-5s %-8s %-8s %-36s\n"
         FORMAT=" %-5s %-8s %-8s %-36s\n"
@@ -871,20 +1069,31 @@ feature_port_cli() {
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 
         while read line; do
-            sleep 0.25
-            if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
-                if ! nc -zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                if ! nc -4zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
                     printf "${FORMAT}" "[!]" "DOWN" "${PORT_NUMBER}" "${HOST}"
-                    send_error_to_log port "${HOST}:${PORT_NUMBER}"
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv4]" "${HOST}:${PORT_NUMBER}"
                 else
                     printf "${FORMAT}" "[i]" "UP" "${PORT_NUMBER}" "${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
+        while read line; do
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+                slow_down
+                HOST="$(echo ${line} | awk '{print $2;}')"
+                PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
+                if ! nc -6zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                    printf "${FORMAT}" "[!]" "DOWN" "${PORT_NUMBER}" "${HOST}"
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv6]" "${HOST}:${PORT_NUMBER}"
+                else
+                    printf "${FORMAT}" "[i]" "UP" "${PORT_NUMBER}" "${HOST}"
+                fi
+            fi
+        done < ${UPTIMEBOT_DATABASE}
     fi
 }
 
@@ -898,18 +1107,12 @@ feature_http_cli() {
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
             PROTOCOL_HTTP4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
             PROTOCOL_HTTP6='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
             PROTOCOL_HTTPS4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
             PROTOCOL_HTTPS6='1'
         fi
@@ -925,68 +1128,231 @@ feature_http_cli() {
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     printf "${FORMAT}" "[!]" "DOWN" "IPv4" "http://${HOST}"
-                    send_error_to_log http "http://${HOST}"
+                    send_error_to_log "[HTTP][IPv4]" "http://${HOST}"
                 else
                     printf "${FORMAT}" "[i]" "UP" "IPv4" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     printf "${FORMAT}" "[!]" "DOWN" "IPv6" "http://${HOST}"
-                    send_error_to_log http "http://${HOST}"
+                    send_error_to_log "[HTTP][IPv6]" "http://${HOST}"
                 else
                     printf "${FORMAT}" "[i]" "UP" "IPv6" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    printf "${FORMAT}" "[!]" "DOWN" "IPv4" "http://${HOST}"
-                    send_error_to_log http "https://${HOST}"
+                    printf "${FORMAT}" "[!]" "DOWN" "IPv4" "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv4]" "https://${HOST}"
                 else
-                    printf "${FORMAT}" "[i]" "UP" "IPv4" "http://${HOST}"
+                    printf "${FORMAT}" "[i]" "UP" "IPv4" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    printf "${FORMAT}" "[!]" "DOWN" "IPv6" "http://${HOST}"
-                    send_error_to_log http "https://${HOST}"
+                    printf "${FORMAT}" "[!]" "DOWN" "IPv6" "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv6]" "https://${HOST}"
                 else
-                    printf "${FORMAT}" "[i]" "UP" "IPv6" "http://${HOST}"
+                    printf "${FORMAT}" "[i]" "UP" "IPv6" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_dns_cli() {
-	echo 'wip'
+	PROTOCOL_DNS_A='0'
+    PROTOCOL_DNS_AAAA='0'
+	PROTOCOL_DNS_CNAME='0'
+    PROTOCOL_DNS_TXT='0'
+    PROTOCOL_DNS_MX='0'
+    PROTOCOL_DNS_NS='0'
+    PROTOCOL_DNS_SOA='0'
+    PROTOCOL_DNS_PTR='0'
+
+	while read line; do
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+            PROTOCOL_DNS_A='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+            PROTOCOL_DNS_AAAA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+            PROTOCOL_DNS_CNAME='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+            PROTOCOL_DNS_TXT='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+            PROTOCOL_DNS_MX='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+            PROTOCOL_DNS_NS='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+            PROTOCOL_DNS_SOA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+            PROTOCOL_DNS_PTR='1'
+        fi
+    done < ${UPTIMEBOT_DATABASE}
+
+	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || [ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ] || \
+	[ "${PROTOCOL_DNS_MX}" -eq '1' ] || [ "${PROTOCOL_DNS_NS}" -eq '1' ] || [ "${PROTOCOL_DNS_SOA}" -eq '1' ] || [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+        DIVIDER="============================================================================="
+        HEADER="\n %-5s %-8s %-8s %-36s %-20s\n"
+        FORMAT=" %-5s %-8s %-8s %-36s %-20s\n"
+        WIDTH="77"
+        printf "${HEADER}" "DNS" "STATUS" "TYPE" "DOMAIN NAME" "DNS CHECK"
+        printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
+		if [ "${PROTOCOL_DNS_A}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t a ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        DNS_VALUE="$(host -t a ${DOMAIN_NAME})"
+                        printf "${FORMAT}" "[!]" "ERROR" "A" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][A]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "A" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_AAAA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t aaaa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "AAAA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][AAAA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "AAAA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_CNAME}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t cname ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "CNAME" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][CNAME]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "CNAME" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_TXT}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t txt ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "TXT" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][TXT]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "TXT" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_MX}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t mx ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "MX" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][MX]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "MX" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_NS}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ns ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "NS" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][NS]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "NS" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_SOA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t soa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "SOA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][SOA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "SOA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ptr ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        printf "${FORMAT}" "[!]" "ERROR" "PTR" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_log "[DNS][PTR]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    else
+                        printf "${FORMAT}" "[i]" "MATCH" "PTR" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+    fi
 }
 
 feature_tls_cli() {
-	echo 'wip'
+	echo ''
 }
 
 feature_tor_cli() {
-	echo 'wip'
+	echo ''
 }
 
 feature_all_cli() {
@@ -1009,55 +1375,66 @@ feature_ping_telegram() {
 
 	if [ "${PROTOCOL_PING}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'ping' ]; then
+                slow_down
                 IP_ADDRESS="$(echo ${line} | awk '{print $2;}')"
 				check_ip_version ${IP_ADDRESS}
 				if [ "${IP_VERSION}" -eq '4' ]; then
 					if ! ping -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
-                            send_error_to_log ping ${IP_ADDRESS}
-                            send_error_to_telegram PING ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv4]" "${IP_ADDRESS}"
+                            send_error_to_telegram "[PING][IPv4]" "${IP_ADDRESS}"
                         fi
                     fi
                 elif [ "${IP_VERSION}" -eq '6' ]; then
 					if ! ping6 -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
                         if ! ping6 -q -c1 -t2 ${IP_ADDRESS} > /dev/null 2>&1; then
-                            send_error_to_log ping ${IP_ADDRESS}
-                            send_error_to_telegram PING ${IP_ADDRESS}
+                            send_error_to_log "[PING][IPv6]" "${IP_ADDRESS}"
+                            send_error_to_telegram "[PING][IPv6]" "${IP_ADDRESS}"
                         fi
                     fi
 				fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_port_telegram() {
-    PROTOCOL_PORT='0'
+    PROTOCOL_PORT4='0'
+    PROTOCOL_PORT6='0'
 
 	while read line; do
-        if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
-            PROTOCOL_PORT='1'
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+            PROTOCOL_PORT4='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+            PROTOCOL_PORT6='1'
         fi
     done < ${UPTIMEBOT_DATABASE}
 
-	if [ "${PROTOCOL_PORT}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
-            if [ "$(echo ${line} | awk '{print $1;}')" == 'port' ]; then
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
-                if ! nc -zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
-                    send_error_to_log port "${HOST}:${PORT_NUMBER}"
-                    send_error_to_telegram PORT "${HOST}:${PORT_NUMBER}"
+                if ! nc -4zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv4]" "${HOST}:${PORT_NUMBER}"
+                    send_error_to_telegram "[PORT][IPv4]" "${HOST}:${PORT_NUMBER}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
+        while read line; do
+            if [ "$(echo ${line} | awk '{print $1;}')" == 'port6' ]; then
+                slow_down
+                HOST="$(echo ${line} | awk '{print $2;}')"
+                PORT_NUMBER="$(echo ${line} | awk '{print $3;}')"
+                if ! nc -6zw2 ${HOST} ${PORT_NUMBER} > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv6]" "${HOST}:${PORT_NUMBER}"
+                    send_error_to_telegram "[PORT][IPv6]" "${HOST}:${PORT_NUMBER}"
+                fi
+            fi
+        done < ${UPTIMEBOT_DATABASE}
     fi
 }
 
@@ -1071,18 +1448,12 @@ feature_http_telegram() {
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
             PROTOCOL_HTTP4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
             PROTOCOL_HTTP6='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
             PROTOCOL_HTTPS4='1'
         fi
-    done < ${UPTIMEBOT_DATABASE}
-    while read line; do
         if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
             PROTOCOL_HTTPS6='1'
         fi
@@ -1091,60 +1462,201 @@ feature_http_telegram() {
 	if [ "${PROTOCOL_HTTP4}" -eq '1' ] || [ "${PROTOCOL_HTTP6}" -eq '1' ] || \
 	[ "${PROTOCOL_HTTPS4}" -eq '1' ] || [ "${PROTOCOL_HTTPS6}" -eq '1' ]; then
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "http://${HOST}"
-                    send_error_to_telegram HTTP "http://${HOST}"
+                    send_error_to_log "[HTTP][IPv4]" "http://${HOST}"
+                    send_error_to_telegram "[HTTP][IPv4]" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'http6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "http://${HOST}"
-                    send_error_to_telegram HTTP "http://${HOST}"
+                    send_error_to_log http "[HTTP][IPv6]" "http://${HOST}"
+                    send_error_to_telegram HTTP "[HTTP][IPv6]" "http://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https4' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -4 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "https://${HOST}"
-                    send_error_to_telegram HTTP "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv4]" "https://${HOST}"
+                    send_error_to_telegram "[HTTPS][IPv4]" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read line; do
-            sleep 0.25
             if [ "$(echo ${line} | awk '{print $1;}')" == 'https6' ]; then
+                slow_down
                 HOST="$(echo ${line} | awk '{print $2;}')"
                 if !  curl -I -6 ${HOST} 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
-                    send_error_to_log http "https://${HOST}"
-                    send_error_to_telegram HTTP "https://${HOST}"
+                    send_error_to_log "[HTTPS][IPv6]" "https://${HOST}"
+                    send_error_to_telegram "[HTTPS][IPv6]" "https://${HOST}"
                 fi
             fi
         done < ${UPTIMEBOT_DATABASE}
-	else
-		error_no_entries_found
     fi
 }
 
 feature_dns_telegram() {
-	echo 'wip'
+	PROTOCOL_DNS_A='0'
+    PROTOCOL_DNS_AAAA='0'
+	PROTOCOL_DNS_CNAME='0'
+    PROTOCOL_DNS_TXT='0'
+    PROTOCOL_DNS_MX='0'
+    PROTOCOL_DNS_NS='0'
+    PROTOCOL_DNS_SOA='0'
+    PROTOCOL_DNS_PTR='0'
+
+	while read line; do
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+            PROTOCOL_DNS_A='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+            PROTOCOL_DNS_AAAA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+            PROTOCOL_DNS_CNAME='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+            PROTOCOL_DNS_TXT='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+            PROTOCOL_DNS_MX='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+            PROTOCOL_DNS_NS='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+            PROTOCOL_DNS_SOA='1'
+        fi
+        if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+            PROTOCOL_DNS_PTR='1'
+        fi
+    done < ${UPTIMEBOT_DATABASE}
+
+	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || [ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ] || \
+	[ "${PROTOCOL_DNS_MX}" -eq '1' ] || [ "${PROTOCOL_DNS_NS}" -eq '1' ] || [ "${PROTOCOL_DNS_SOA}" -eq '1' ] || [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+		if [ "${PROTOCOL_DNS_A}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'a' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t a ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        DNS_VALUE="$(host -t a ${DOMAIN_NAME})"
+                        send_error_to_log "[DNS][A]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][A]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_AAAA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'aaaa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t aaaa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][AAAA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][AAAA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_CNAME}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'cname' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t cname ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][CNAME]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][CNAME]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_TXT}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'txt' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t txt ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][TXT]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][TXT]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_MX}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'mx' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t mx ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][MX]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][MX]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_NS}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ns' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ns ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][NS]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][NS]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_SOA}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'soa' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t soa ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][SOA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][SOA]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+        if [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
+            while read line; do
+                if [ "$(echo ${line} | awk '{print $1;}')" == 'ptr' ]; then
+                    slow_down
+                    DOMAIN_NAME="$(echo ${line} | awk '{print $2;}')"
+                    DNS_CHECK="$(echo ${line} | awk '{print $3;}')"
+                    if ! host -t ptr ${DOMAIN_NAME} 2>&1 | grep "${DNS_CHECK}" > /dev/null; then
+                        send_error_to_log "[DNS][PTR]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                        send_error_to_telegram "[DNS][PTR]" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                    fi
+                fi
+            done < ${UPTIMEBOT_DATABASE}
+        fi
+    fi
 }
 
 feature_tls_telegram() {
-	echo 'wip'
+	printf ''
 }
 
 feature_tor_telegram() {
-	echo 'wip'
+	printf ''
 }
 
 feature_all_telegram() {
