@@ -12,7 +12,7 @@ If you're looking for a simple monitoring tool that can be setup in less than a 
 * Automatic cronjob creation.
 
 ## Installing / Getting started
-There is a install script to get you started right away. This installs the files to the correct directories and set ownership and permissions.
+There is a install script to get you started right away. This installs the files to the correct directories and sets ownership and permissions.
 ```
 wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/install_uptimebot
 sh install_uptimebot.sh
@@ -23,7 +23,7 @@ When installed, add a monitoring target to `/usr/local/etc/uptimebot_targets.con
 General settings and automated tasks can be configured in `/usr/local/etc/uptimebot.conf`. Automated tasks can be effectuated with `uptimebot --cron`. Monitoring targets can be set in `/usr/local/etc/uptimebot_targets.conf`.
 
 ## How to use
-`uptimebot` has **features**, **methods** and **options**. Methods can be used standalone, but a feature always requires a method and vice versa. Some examples:"
+`uptimebot` has **features**, **methods** and **options**. Options can be used standalone, but a feature always requires a method and vice versa. Some examples:"
 
 ```
 # options
@@ -42,7 +42,10 @@ For a full list of features, methods and options run `uptimebot --help`.
 If you have questions, suggestions or find bugs, please let us know via the issue tracker.
 
 ## Changelog
-### 1.2.0-RELEASE (26-04-2022)
+### 1.2.0-RELEASE ([26-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/e09c7c897472a25ededeaf43635e0feca40c2bb8))
+- Got rid of similar pieces of code by combining functions.
+- Fixed a lot of shellcheck warnings and errors.
+- Added check for telegram configuration.
 
 ### 1.1.0-RELEASE ([25-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/46166dd48c44df563f1b7b703a900755de9a5b91))
 - Added feature DNS with support for A, AAAA, CNAME, TXT, MX, NS, SOA and PTR records.
