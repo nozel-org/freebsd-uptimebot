@@ -42,6 +42,10 @@ For a full list of features, methods and options run `uptimebot --help`.
 If you have questions, suggestions or find bugs, please let us know via the issue tracker.
 
 ## Changelog
+### 1.3.0-RELEASE ([27-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/92d2b83e1ac36080f5d9832f7c3854ac43325148))
+- Added feature TLS.
+- Added emoji to method Telegram.
+
 ### 1.2.0-RELEASE ([26-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/e09c7c897472a25ededeaf43635e0feca40c2bb8))
 - Got rid of similar pieces of code by combining functions.
 - Fixed a lot of shellcheck warnings and errors.
