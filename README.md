@@ -42,6 +42,14 @@ For a full list of features, methods and options run `uptimebot --help`.
 If you have questions, suggestions or find bugs, please let us know via the issue tracker.
 
 ## Changelog
+### 1.4.0-RELEASE ([28-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/51dba5a9b1ba660a47cfae408f71137162c7c985))
+- Renamed method logonly to log.
+- Made method list consistent with the method cli output.
+- Fixed a bug in feature tls that would generate errors for already expired certificates.
+- Added a basic check for monitoring target validity.
+- Added requirement check for curl.
+- Added inverted functionality to feature port.
+
 ### 1.3.0-RELEASE ([27-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/92d2b83e1ac36080f5d9832f7c3854ac43325148))
 - Added feature TLS.
 - Added emoji to method Telegram.
