@@ -1,7 +1,7 @@
 #!/bin/sh
 
 #############################################################################
-# Version 1.3.0-RELEASE (27-04-2022)
+# Version 1.4.0-RELEASE (28-04-2022)
 #############################################################################
 
 #############################################################################
@@ -20,7 +20,7 @@
 #############################################################################
 
 # uptimebot version
-UPTIMEBOT_VERSION='1.3.0'
+UPTIMEBOT_VERSION='1.4.0'
 
 # check whether uptimebot.conf is available and source it
 if [ -f /usr/local/etc/uptimebot.conf ]; then
@@ -29,19 +29,19 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
     UPTIMEBOT_DATABASE='0'
     UPTIMEBOT_DELAY='0'
     UPTIMEBOT_TLS_ALERT='0'
-    PING_LOGONLY='0'
+    PING_LOG='0'
     PING_TELEGRAM='0'
-    PORT_LOGONLY='0'
+    PORT_LOG='0'
     PORT_TELEGRAM='0'
-    HTTP_LOGONLY='0'
+    HTTP_LOG='0'
     HTTP_TELEGRAM='0'
-    DNS_LOGONLY='0'
+    DNS_LOG='0'
     DNS_TELEGRAM='0'
-    TLS_LOGONLY='0'
+    TLS_LOG='0'
     TLS_TELEGRAM='0'
-    TOR_LOGONLY='0'
+    TOR_LOG='0'
     TOR_TELEGRAM='0'
-    ALL_LOGONLY='0'
+    ALL_LOG='0'
     ALL_TELEGRAM='0'
     TELEGRAM_TOKEN='0'
     TELEGRAM_CHAT='0'
@@ -62,44 +62,44 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
     if [ "${UPTIMEBOT_TLS_ALERT}" = '0' ]; then
         UPTIMEBOT_TLS_ALERT='7'
     fi
-    if [ "${PING_LOGONLY}" = '0' ]; then
-        PING_LOGONLY='NO'
+    if [ "${PING_LOG}" = '0' ]; then
+        PING_LOG='NO'
     fi
     if [ "${PING_TELEGRAM}" = '0' ]; then
         PING_TELEGRAM='NO'
     fi
-    if [ "${PORT_LOGONLY}" = '0' ]; then
-        PORT_LOGONLY='NO'
+    if [ "${PORT_LOG}" = '0' ]; then
+        PORT_LOG='NO'
     fi
     if [ "${PORT_TELEGRAM}" = '0' ]; then
         PORT_TELEGRAM='NO'
     fi
-    if [ "${HTTP_LOGONLY}" = '0' ]; then
-        HTTP_LOGONLY='NO'
+    if [ "${HTTP_LOG}" = '0' ]; then
+        HTTP_LOG='NO'
     fi
     if [ "${HTTP_TELEGRAM}" = '0' ]; then
         HTTP_TELEGRAM='NO'
     fi
-    if [ "${DNS_LOGONLY}" = '0' ]; then
-        DNS_LOGONLY='NO'
+    if [ "${DNS_LOG}" = '0' ]; then
+        DNS_LOG='NO'
     fi
     if [ "${DNS_TELEGRAM}" = '0' ]; then
         DNS_TELEGRAM='NO'
     fi
-    if [ "${TLS_LOGONLY}" = '0' ]; then
-        TLS_LOGONLY='NO'
+    if [ "${TLS_LOG}" = '0' ]; then
+        TLS_LOG='NO'
     fi
     if [ "${TLS_TELEGRAM}" = '0' ]; then
         TLS_TELEGRAM='NO'
     fi
-    if [ "${TOR_LOGONLY}" = '0' ]; then
-        TOR_LOGONLY='NO'
+    if [ "${TOR_LOG}" = '0' ]; then
+        TOR_LOG='NO'
     fi
     if [ "${TOR_TELEGRAM}" = '0' ]; then
         TOR_TELEGRAM='NO'
     fi
-    if [ "${ALL_LOGONLY}" = '0' ]; then
-        ALL_LOGONLY='NO'
+    if [ "${ALL_LOG}" = '0' ]; then
+        ALL_LOG='NO'
     fi
     if [ "${ALL_TELEGRAM}" = '0' ]; then
         ALL_TELEGRAM='NO'
@@ -121,10 +121,12 @@ fi
 
 # populate validation variables with zeros for validation
 ARGUMENT_OPTION='0'
-ARGUMENT_VERSION='0'
-ARGUMENT_HELP='0'
 ARGUMENT_FEATURE='0'
 ARGUMENT_METHOD='0'
+ARGUMENT_VERSION='0'
+ARGUMENT_HELP='0'
+ARGUMENT_CHECK='0'
+ARGUMENT_CRON='0'
 ARGUMENT_PING='0'
 ARGUMENT_PORT='0'
 ARGUMENT_HTTP='0'
@@ -133,7 +135,7 @@ ARGUMENT_TLS='0'
 ARGUMENT_TOR='0'
 ARGUMENT_ALL='0'
 ARGUMENT_LIST='0'
-ARGUMENT_LOGONLY='0'
+ARGUMENT_LOG='0'
 ARGUMENT_CLI='0'
 ARGUMENT_TELEGRAM='0'
 
@@ -149,6 +151,12 @@ while test -n "$1"; do
 
         --help|-help|help|--h|-h|h)
             ARGUMENT_HELP='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+
+        --check|-check|check)
+            ARGUMENT_CHECK='1'
             ARGUMENT_OPTION='1'
             shift
             ;;
@@ -209,8 +217,8 @@ while test -n "$1"; do
             shift
             ;;
 
-		--logonly|logonly|-l|l)
-            ARGUMENT_LOGONLY='1'
+		--log|log|-l|l)
+            ARGUMENT_LOG='1'
             ARGUMENT_METHOD='1'
             shift
             ;;
@@ -239,6 +247,12 @@ done
 ####################################################################################################
 # ERROR FUNCTIONS
 ####################################################################################################
+
+error_curl_not_installed() {
+    printf "uptimebot: curl not installed.\n"
+    printf "use 'pkg install curl' or install curl from ports.\n"
+    exit 1
+}
 
 error_invalid_argument() {
     printf "uptimebot: invalid argument used.\nUse 'uptimebot --help' for a list of valid arguments.\n"
@@ -273,10 +287,17 @@ error_telegram_not_configured() {
 # REQUIREMENT FUNCTIONS
 ####################################################################################################
 
+requirement_curl() {
+    # show error when curl cannot be found (which probably means the user has not installed curl)
+    if [ ! "$(command -v curl)" ]; then
+        error_curl_not_installed
+    fi
+}
+
 uptimebot_argument_validate() {
     # combine argument categories
     ARGUMENT_FEATURES_COMBINED="$((ARGUMENT_PING + ARGUMENT_PORT + ARGUMENT_HTTP + ARGUMENT_DNS + ARGUMENT_TLS + ARGUMENT_TOR + ARGUMENT_ALL))"
-    ARGUMENT_METHOD_COMBINED="$((ARGUMENT_LIST + ARGUMENT_LOGONLY + ARGUMENT_CLI + ARGUMENT_TELEGRAM))"
+    ARGUMENT_METHOD_COMBINED="$((ARGUMENT_LIST + ARGUMENT_LOG + ARGUMENT_CLI + ARGUMENT_TELEGRAM))"
 
     if [ "${ARGUMENT_NONE}" = '1' ]; then
         error_invalid_argument
@@ -321,10 +342,11 @@ option_help() {
 	printf " --all               	Monitor all configured Features\n\n"
     printf "Methods:\n"
 	printf " --list (default)       Output configured rules to cli\n"
-	printf " --logonly              Start monitoring and only output to log\n"
-    printf " --cli                  Start monitoring and output to cli\n"
-    printf " --telegram             Start monitoring and output to Telegram\n\n"
+	printf " --log                  Start monitoring and only output to log\n"
+    printf " --cli                  Start monitoring and output to log and cli\n"
+    printf " --telegram             Start monitoring and output to log and Telegram\n\n"
     printf "Options:\n"
+    printf " --check                Checks monitoring target list for validity\n"
     printf " --cron                 Effectuate cron changes from uptimebot config\n"
     printf " --help                 Display this help and exit\n"
     printf " --version              Display version information and exit\n"
@@ -333,17 +355,76 @@ option_help() {
     exit 0
 }
 
+option_check() {
+    # PING checks amount of arguments and whether IP addresses are used
+    # PORT checks amount of arguments and whether the port is a number
+    # HTTP, DNS and TLS checks amount of arguments only
+
+    DIVIDER="============================================================================="
+    HEADER="\n %-5s %-5s %-8s %-8s %-36s\n"
+    FORMAT=" %-5s %-5s %-8s %-8s %-36s\n"
+    WIDTH="77"
+    printf "${HEADER}" "CHECK" "LINE" "FEATURE" "STATUS" "ERROR"
+    printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
+    LINE_NUMBER='0'
+
+    while read -r line; do
+        LINE_NUMBER="$(( LINE_NUMBER + 1 ))"
+        LINE_PREFACE="$(echo "${line}" | awk '{print $1;}')"
+        if [ "${LINE_PREFACE}" = 'ping' ]; then
+            if [ "$(echo "${line}" | wc -w)" -eq '2' ]; then
+                if [ "$(echo "${line}" | awk '{print $2;}')" != "${1#*[0-9].[0-9]}" ] || [ "$(echo "${line}" | awk '{print $2;}')" != "${1#*:[0-9a-fA-F]}" ]; then
+                    printf "${FORMAT}" "[i]" "${LINE_NUMBER}" "PING" "PASS" ""
+                else
+                    printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "PING" "ERROR" "NO VALID IP"
+                fi
+            else
+                printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "PING" "ERROR" "Wrong amount of arguments"
+            fi
+        elif [ "${LINE_PREFACE}" = 'port4' ] || [ "${LINE_PREFACE}" = 'port6' ] || [ "${LINE_PREFACE}" = 'port4i' ] || [ "${LINE_PREFACE}" = 'port6i' ]; then
+            if [ "$(echo "${line}" | wc -w)" -eq '3' ]; then
+                if [ "$(echo "${line}" | awk '{print $3;}')" -eq "$(echo "${line}" | awk '{print $3;}')" ] 2> /dev/null ; then
+                        printf "${FORMAT}" "[i]" "${LINE_NUMBER}" "PORT" "PASS" ""
+                else
+                        printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "PORT" "ERROR" "Port not recognized"
+                fi
+            else
+                printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "PORT" "ERROR" "Wrong amount of arguments"
+            fi
+        elif [ "${LINE_PREFACE}" = 'http4' ] || [ "${LINE_PREFACE}" = 'http6' ] || [ "${LINE_PREFACE}" = 'https4' ] || [ "${LINE_PREFACE}" = 'https6' ]; then
+            if [ "$(echo "${line}" | wc -w)" -eq '2' ]; then
+                printf "${FORMAT}" "[i]" "${LINE_NUMBER}" "HTTP" "PASS" ""
+            else
+                printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "HTTP" "ERROR" "Wrong amount of arguments"
+            fi
+        elif [ "${LINE_PREFACE}" = 'a' ] || [ "${LINE_PREFACE}" = 'aaaa' ] || [ "${LINE_PREFACE}" = 'cname' ] || [ "${LINE_PREFACE}" = 'txt' ] || \
+        [ "${LINE_PREFACE}" = 'mx' ] || [ "${LINE_PREFACE}" = 'ns' ] || [ "${LINE_PREFACE}" = 'soa' ] || [ "${LINE_PREFACE}" = 'ptr' ]; then
+            if [ "$(echo "${line}" | wc -w)" -eq '3' ]; then
+                printf "${FORMAT}" "[i]" "${LINE_NUMBER}" "DNS" "PASS" ""
+            else
+                printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "DNS" "ERROR" "Wrong amount of arguments"
+            fi
+        elif [ "${LINE_PREFACE}" = 'tls' ]; then
+            if [ "$(echo "${line}" | wc -w)" -eq '2' ]; then
+                printf "${FORMAT}" "[i]" "${LINE_NUMBER}" "TLS" "PASS" ""
+            else
+                printf "${FORMAT}" "[!]" "${LINE_NUMBER}" "TLS" "ERROR" "Wrong amount of arguments"
+            fi
+        fi
+    done < ${UPTIMEBOT_DATABASE}
+}
+
 option_cron() {
     printf "[1] Removing old uptimebot cronjob\n"
     rm -f /etc/cron.d/uptimebot
 
-    if [ "${PING_LOGONLY}" = 'NO' ] && [ "${PING_TELEGRAM}" = 'NO' ] && \
-    [ "${PORT_LOGONLY}" = 'NO' ] && [ "${PORT_TELEGRAM}" = 'NO' ] && \
-    [ "${HTTP_LOGONLY}" = 'NO' ] && [ "${HTTP_TELEGRAM}" = 'NO' ] && \
-    [ "${DNS_LOGONLY}" = 'NO' ] && [ "${DNS_TELEGRAM}" = 'NO' ] && \
-    [ "${TLS_LOGONLY}" = 'NO' ] && [ "${TLS_TELEGRAM}" = 'NO' ] && \
-    [ "${TOR_LOGONLY}" = 'NO' ] && [ "${TOR_TELEGRAM}" = 'NO' ] && \
-    [ "${ALL_LOGONLY}" = 'NO' ] && [ "${ALL_TELEGRAM}" = 'NO' ]; then
+    if [ "${PING_LOG}" = 'NO' ] && [ "${PING_TELEGRAM}" = 'NO' ] && \
+    [ "${PORT_LOG}" = 'NO' ] && [ "${PORT_TELEGRAM}" = 'NO' ] && \
+    [ "${HTTP_LOG}" = 'NO' ] && [ "${HTTP_TELEGRAM}" = 'NO' ] && \
+    [ "${DNS_LOG}" = 'NO' ] && [ "${DNS_TELEGRAM}" = 'NO' ] && \
+    [ "${TLS_LOG}" = 'NO' ] && [ "${TLS_TELEGRAM}" = 'NO' ] && \
+    [ "${TOR_LOG}" = 'NO' ] && [ "${TOR_TELEGRAM}" = 'NO' ] && \
+    [ "${ALL_LOG}" = 'NO' ] && [ "${ALL_TELEGRAM}" = 'NO' ]; then
         printf "[2] No automated tasks to add.\n"
         printf "All done!\n"
     else
@@ -351,50 +432,50 @@ option_cron() {
         if [ "${PING_TELEGRAM}" = 'YES' ]; then
             printf "  - ping to Telegram on cron schedule %s\n" "${PING_CRON}"
             printf "%s root /usr/local/bin/uptimebot --ping --telegram\n" "${PING_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${PING_LOGONLY}" = 'YES' ]; then
-            printf "  - ping to logonly on cron schedule %s\n" "${PING_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --ping --logonly\n" "${PING_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${PING_LOG}" = 'YES' ]; then
+            printf "  - ping to log on cron schedule %s\n" "${PING_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --ping --log\n" "${PING_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${PORT_TELEGRAM}" = 'YES' ]; then
             printf "  - port to Telegram on cron schedule %s\n" "${PORT_CRON}"
             printf "%s root /usr/local/bin/uptimebot --port --telegram\n" "${PORT_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${PORT_LOGONLY}" = 'YES' ]; then
-            printf "  - port to logonly on cron schedule %s\n" "${PORT_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --port --logonly\n" "${PORT_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${PORT_LOG}" = 'YES' ]; then
+            printf "  - port to log on cron schedule %s\n" "${PORT_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --port --log\n" "${PORT_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${HTTP_TELEGRAM}" = 'YES' ]; then
             printf "  - HTTP to Telegram on cron schedule %s\n" "${HTTP_CRON}"
             printf "%s root /usr/local/bin/uptimebot --http --telegram\n" "${HTTP_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${HTTP_LOGONLY}" = 'YES' ]; then
-            printf "  - HTTP to logonly on cron schedule %s\n" "${HTTP_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --http --logonly\n" "${HTTP_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${HTTP_LOG}" = 'YES' ]; then
+            printf "  - HTTP to log on cron schedule %s\n" "${HTTP_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --http --log\n" "${HTTP_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${DNS_TELEGRAM}" = 'YES' ]; then
             printf "  - DNS to Telegram on cron schedule %s\n" "${DNS_CRON}"
             printf "%s root /usr/local/bin/uptimebot --dns --telegram\n" "${DNS_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${DNS_LOGONLY}" = 'YES' ]; then
-            printf "  - DNS to logonly on cron schedule %s\n" "${DNS_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --dns --logonly\n" "${DNS_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${DNS_LOG}" = 'YES' ]; then
+            printf "  - DNS to log on cron schedule %s\n" "${DNS_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --dns --log\n" "${DNS_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${TLS_TELEGRAM}" = 'YES' ]; then
             printf "  - TLS to Telegram on cron schedule %s\n" "${TLS_CRON}"
             printf "%s root /usr/local/bin/uptimebot --tls --telegram\n" "${TLS_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${TLS_LOGONLY}" = 'YES' ]; then
-            printf "  - TLS to logonly on cron schedule %s\n" "${TLS_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --tls --logonly\n" "${TLS_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${TLS_LOG}" = 'YES' ]; then
+            printf "  - TLS to log on cron schedule %s\n" "${TLS_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --tls --log\n" "${TLS_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${TOR_TELEGRAM}" = 'YES' ]; then
             printf "  - TOR to Telegram on cron schedule %s\n" "${TOR_CRON}"
             printf "%s root /usr/local/bin/uptimebot --tor --telegram\n" "${TOR_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${TOR_LOGONLY}" = 'YES' ]; then
-            printf "  - TOR to logonly on cron schedule %s\n" "${TOR_CRON}"
-            printf "%s root /usr/local/bin/uptimebot --tor --logonly\n" "${TOR_CRON}" >> /etc/cron.d/uptimebot
+        elif [ "${TOR_LOG}" = 'YES' ]; then
+            printf "  - TOR to log on cron schedule %s\n" "${TOR_CRON}"
+            printf "%s root /usr/local/bin/uptimebot --tor --log\n" "${TOR_CRON}" >> /etc/cron.d/uptimebot
         fi
         if [ "${ALL_TELEGRAM}" = 'YES' ]; then
             printf "  - ALL to Telegram on cron schedule %s\n" "${ALL_CRON}"
             printf "%s root /usr/local/bin/uptimebot --all --telegram\n" "${ALL_CRON}" >> /etc/cron.d/uptimebot
-        elif [ "${ALL_LOGONLY}" = 'YES' ]; then
-            printf "  - ALL to logonly on cron schedule %s\n" "${ALL_CRON}"
+        elif [ "${ALL_LOG}" = 'YES' ]; then
+            printf "  - ALL to log on cron schedule %s\n" "${ALL_CRON}"
             printf "%s root /usr/local/bin/uptimebot --all --logon\n" "${ALL_CRON}" >> /etc/cron.d/uptimebot
         fi
         printf "All done! Your new schedule can be found in /etc/cron.d/uptimebot.\n"
@@ -484,17 +565,16 @@ feature_ping_list() {
 
 	if [ "${PROTOCOL_PING}" -eq '1' ]; then
         DIVIDER="============================================================================="
-		HEADER="\n %-6s %-36s\n"
-        FORMAT=" %-6s %-36s\n"
+		HEADER="\n %-5s %-8s %-36s\n"
+        FORMAT=" %-5s %-8s %-36s\n"
         WIDTH="77"
-        printf "${HEADER}" "PING" "IP ADDRESS"
+        printf "${HEADER}" "PING" "IP" "IP ADDRESS"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
-
         while read -r line; do
             if [ "$(echo "${line}" | awk '{print $1;}')" = 'ping' ]; then
                 IP_ADDRESS="$(echo "${line}" | awk '{print $2;}')"
 				check_ip_version "${IP_ADDRESS}"
-                printf "${FORMAT}" "IPv${IP_VERSION}" "${IP_ADDRESS}"
+                printf "${FORMAT}" "[*]" "IPv${IP_VERSION}" "${IP_ADDRESS}"
             fi
         done < ${UPTIMEBOT_DATABASE}
     fi
@@ -503,6 +583,8 @@ feature_ping_list() {
 feature_port_list() {
     PROTOCOL_PORT4='0'
     PROTOCOL_PORT6='0'
+    PROTOCOL_PORT4_INVERSE='0'
+    PROTOCOL_PORT6_INVERSE='0'
 
 	while read -r line; do
         if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4' ]; then
@@ -511,28 +593,48 @@ feature_port_list() {
         if [ "$(echo "${line}" | awk '{print $1;}')" = 'port6' ]; then
             PROTOCOL_PORT6='1'
         fi
+        if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4i' ]; then
+            PROTOCOL_PORT4_INVERSE='1'
+        fi
+        if [ "$(echo "${line}" | awk '{print $1;}')" = 'port6i' ]; then
+            PROTOCOL_PORT6_INVERSE='1'
+        fi
     done < ${UPTIMEBOT_DATABASE}
 
-    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ] || \
+    [ "${PROTOCOL_PORT4_INVERSE}" -eq '1' ] || [ "${PROTOCOL_PORT6_INVERSE}" -eq '1' ]; then
         DIVIDER="============================================================================="
-		HEADER="\n %-6s %-36s\n"
-        FORMAT=" %-6s %-36s\n"
+		HEADER="\n %-5s %-8s %-8s %-8s %-36s\n"
+        FORMAT=" %-5s %-8s %-8s %-8s %-36s\n"
         WIDTH="77"
-        printf "${HEADER}" "PORT" "HOST"
+        printf "${HEADER}" "PORT" "IP" "PORT" "TEST" "HOST"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
-
         while read -r line; do
             if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4' ]; then
                 HOST="$(echo "${line}" | awk '{print $2;}')"
                 PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
-				printf "${FORMAT}" "${PORT_NUMBER}" "${HOST}"
+				printf "${FORMAT}" "[*]" "IPv4" "${PORT_NUMBER}" "OPEN" "${HOST}"
             fi
         done < ${UPTIMEBOT_DATABASE}
         while read -r line; do
             if [ "$(echo "${line}" | awk '{print $1;}')" = 'port6' ]; then
                 HOST="$(echo "${line}" | awk '{print $2;}')"
                 PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
-				printf "${FORMAT}" "${PORT_NUMBER}" "${HOST}"
+				printf "${FORMAT}" "[*]" "IPv6" "${PORT_NUMBER}" "OPEN" "${HOST}"
+            fi
+        done < ${UPTIMEBOT_DATABASE}
+        while read -r line; do
+            if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4i' ]; then
+                HOST="$(echo "${line}" | awk '{print $2;}')"
+                PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
+				printf "${FORMAT}" "[*]" "IPv4" "${PORT_NUMBER}" "CLOSED" "${HOST}"
+            fi
+        done < ${UPTIMEBOT_DATABASE}
+        while read -r line; do
+            if [ "$(echo "${line}" | awk '{print $1;}')" = 'port6i' ]; then
+                HOST="$(echo "${line}" | awk '{print $2;}')"
+                PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
+				printf "${FORMAT}" "[*]" "IPv6" "${PORT_NUMBER}" "CLOSED" "${HOST}"
             fi
         done < ${UPTIMEBOT_DATABASE}
     fi
@@ -562,16 +664,16 @@ feature_http_list() {
 	if [ "${PROTOCOL_HTTP4}" -eq '1' ] || [ "${PROTOCOL_HTTP6}" -eq '1' ] || \
 	[ "${PROTOCOL_HTTPS4}" -eq '1' ] || [ "${PROTOCOL_HTTPS6}" -eq '1' ]; then
         DIVIDER="============================================================================="
-        HEADER="\n %-6s %-36s\n"
-        FORMAT=" %-6s %-36s\n"
+        HEADER="\n %-5s %-8s %-8s %-36s\n"
+        FORMAT=" %-5s %-8s %-8s %-36s\n"
         WIDTH="77"
-        printf "${HEADER}" "HTTP" "HOST"
+        printf "${HEADER}" "HTTP" "IP" "PROTO" "HOST"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
         if [ "${PROTOCOL_HTTP4}" -eq '1' ]; then
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'http4' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                    printf "${FORMAT}" "IPv4" "http://${DOMAIN_NAME}"
+                    printf "${FORMAT}" "[*]" "IPv4" "HTTP" "${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -579,7 +681,7 @@ feature_http_list() {
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'http6' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                    printf "${FORMAT}" "IPv6" "https://${DOMAIN_NAME}"
+                    printf "${FORMAT}" "[*]" "IPv6" "HTTP" "${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -587,7 +689,7 @@ feature_http_list() {
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'https4' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                    printf "${FORMAT}" "IPv4" "http://${DOMAIN_NAME}"
+                    printf "${FORMAT}" "[*]" "IPv4" "HTTPS" "${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -595,7 +697,7 @@ feature_http_list() {
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'https6' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                    printf "${FORMAT}" "IPv6" "https://${DOMAIN_NAME}"
+                    printf "${FORMAT}" "[*]" "IPv6" "HTTPS" "${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -642,17 +744,17 @@ feature_dns_list() {
 	if [ "${PROTOCOL_DNS_A}" -eq '1' ] || [ "${PROTOCOL_DNS_AAAA}" -eq '1' ] || [ "${PROTOCOL_DNS_CNAME}" -eq '1' ] || [ "${PROTOCOL_DNS_TXT}" -eq '1' ] || \
 	[ "${PROTOCOL_DNS_MX}" -eq '1' ] || [ "${PROTOCOL_DNS_NS}" -eq '1' ] || [ "${PROTOCOL_DNS_SOA}" -eq '1' ] || [ "${PROTOCOL_DNS_PTR}" -eq '1' ]; then
         DIVIDER="============================================================================="
-        HEADER="\n %-6s %-36s %-36s\n"
-        FORMAT=" %-6s %-36s %-36s\n"
+        HEADER="\n %-5s %-8s %-36s %-36s\n"
+        FORMAT=" %-5s %-8s %-36s %-36s\n"
         WIDTH="77"
-        printf "${HEADER}" "DNS" "DOMAIN NAME" "ENTRY"
+        printf "${HEADER}" "DNS" "TYPE" "DOMAIN" "ENTRY"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 		if [ "${PROTOCOL_DNS_A}" -eq '1' ]; then
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'a' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "A" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "A" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -661,7 +763,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'aaaa' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "AAAA" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "AAAA" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -670,7 +772,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'cname' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "CNAME" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "CNAME" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -679,7 +781,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'txt' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "TXT" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "TXT" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -688,7 +790,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'mx' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "MX" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "MX" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -697,7 +799,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'ns' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "NS" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "NS" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -706,7 +808,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'soa' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "SOA" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "SOA" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -715,7 +817,7 @@ feature_dns_list() {
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'ptr' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
                     ENTRY="$(echo "${line}" | awk '{print $3;}')"
-                    printf "${FORMAT}" "PTR" "${DOMAIN_NAME}" "${ENTRY}"
+                    printf "${FORMAT}" "[*]" "PTR" "${DOMAIN_NAME}" "${ENTRY}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
         fi
@@ -733,16 +835,16 @@ feature_tls_list() {
 
 	if [ "${PROTOCOL_TLS}" -eq '1' ]; then
 		DIVIDER="============================================================================="
-        HEADER="\n %-6s %-8s\n"
-        FORMAT=" %-6s %-8s\n"
+        HEADER="\n %-5s %-36s\n"
+        FORMAT=" %-5s %-36s\n"
         WIDTH="77"
-		printf "${HEADER}" "TLS" "DOMAIN NAME"
+		printf "${HEADER}" "DOMAIN NAME"
         printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
 		if [ "${PROTOCOL_TLS}" -eq '1' ]; then
             while read -r line; do
                 if [ "$(echo "${line}" | awk '{print $1;}')" = 'tls' ]; then
                     DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                    printf "${FORMAT}" "TLS" "${DOMAIN_NAME}"
+                    printf "${FORMAT}" "[*]" "${DOMAIN_NAME}"
                 fi
             done < ${UPTIMEBOT_DATABASE}
 		fi
@@ -790,14 +892,14 @@ feature_ping() {
                         if ! ping -q -c1 -t2 "${IP_ADDRESS}" > /dev/null 2>&1; then
                             send_error_to_log "[PING][IPv4]" "${IP_ADDRESS}"
                             if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                                printf "${FORMAT}" "[!]" "DOWN" "IPv4" "${IP_ADDRESS}"
+                                printf "${FORMAT}" "[!]" "ERROR" "IPv4" "${IP_ADDRESS}"
                             elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                                 send_error_to_telegram "[PING][IPv4]" "${IP_ADDRESS}"
                             fi
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "UP" "IPv4" "${IP_ADDRESS}"
+                            printf "${FORMAT}" "[i]" "OK" "IPv4" "${IP_ADDRESS}"
                         fi
                     fi
                 elif [ "${IP_VERSION}" -eq '6' ]; then
@@ -805,14 +907,14 @@ feature_ping() {
                         if ! ping6 -q -c1 -t2 "${IP_ADDRESS}" > /dev/null 2>&1; then
                             send_error_to_log "[PING][IPv6]" "${IP_ADDRESS}"
                             if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                                printf "${FORMAT}" "[!]" "DOWN" "IPv6" "${IP_ADDRESS}"
+                                printf "${FORMAT}" "[!]" "ERROR" "IPv6" "${IP_ADDRESS}"
                             elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                                 send_error_to_telegram "[PING][IPv6]" "${IP_ADDRESS}"
                             fi
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "UP" "IPv6" "${IP_ADDRESS}"
+                            printf "${FORMAT}" "[i]" "OK" "IPv6" "${IP_ADDRESS}"
                         fi
                     fi
 				fi
@@ -824,6 +926,8 @@ feature_ping() {
 feature_port() {
     PROTOCOL_PORT4='0'
     PROTOCOL_PORT6='0'
+    PROTOCOL_PORT4_INVERSE='0'
+    PROTOCOL_PORT6_INVERSE='0'
 
 	while read -r line; do
         if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4' ]; then
@@ -834,13 +938,14 @@ feature_port() {
         fi
     done < ${UPTIMEBOT_DATABASE}
 
-    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ]; then
+    if [ "${PROTOCOL_PORT4}" -eq '1' ] || [ "${PROTOCOL_PORT6}" -eq '1' ] || \
+    [ "${PROTOCOL_PORT4_INVERSE}" -eq '1' ] || [ "${PROTOCOL_PORT6_INVERSE}" -eq '1' ]; then
         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
             DIVIDER="============================================================================="
-            HEADER="\n %-5s %-8s %-8s %-36s\n"
-            FORMAT=" %-5s %-8s %-8s %-36s\n"
+            HEADER="\n %-5s %-8s %-8s %-8s %-36s\n"
+            FORMAT=" %-5s %-8s %-8s %-8s %-36s\n"
             WIDTH="77"
-            printf "${HEADER}" "PORT" "STATUS" "NR" "HOST"
+            printf "${HEADER}" "PORT" "STATUS" "IP" "NR" "HOST"
             printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
         fi
         while read -r line; do
@@ -851,13 +956,13 @@ feature_port() {
                 if ! nc -4zw2 "${HOST}" "${PORT_NUMBER}" > /dev/null 2>&1; then
                     send_error_to_log "[PORT][${PORT_NUMBER}][IPv4]" "${HOST}:${PORT_NUMBER}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "${PORT_NUMBER}" "${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv4" "${PORT_NUMBER}" "${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[PORT][IPv4]" "${HOST}:${PORT_NUMBER}"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "${PORT_NUMBER}" "${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv4" "${PORT_NUMBER}" "${HOST}"
                     fi
                 fi
             fi
@@ -870,13 +975,51 @@ feature_port() {
                 if ! nc -6zw2 "${HOST}" "${PORT_NUMBER}" > /dev/null 2>&1; then
                     send_error_to_log "[PORT][${PORT_NUMBER}][IPv6]" "${HOST}:${PORT_NUMBER}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "${PORT_NUMBER}" "${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv6" "${PORT_NUMBER}" "${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[PORT][IPv6]" "${HOST}:${PORT_NUMBER}"
                     fi 
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "${PORT_NUMBER}" "${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv6" "${PORT_NUMBER}" "${HOST}"
+                    fi
+                fi
+            fi
+        done < ${UPTIMEBOT_DATABASE}
+        while read -r line; do
+            if [ "$(echo "${line}" | awk '{print $1;}')" = 'port4i' ]; then
+                slow_down
+                HOST="$(echo "${line}" | awk '{print $2;}')"
+                PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
+                if nc -4zw2 "${HOST}" "${PORT_NUMBER}" > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv4]" "${HOST}:${PORT_NUMBER}"
+                    if [ "${ARGUMENT_CLI}" -eq '1' ]; then
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv4" "${PORT_NUMBER}" "${HOST}"
+                    elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
+                        send_error_to_telegram "[PORT][IPv4]" "${HOST}:${PORT_NUMBER}"
+                    fi
+                else
+                    if [ "${ARGUMENT_CLI}" -eq '1' ]; then
+                        printf "${FORMAT}" "[i]" "OK" "IPv4" "${PORT_NUMBER}" "${HOST}"
+                    fi
+                fi
+            fi
+        done < ${UPTIMEBOT_DATABASE}
+        while read -r line; do
+            if [ "$(echo "${line}" | awk '{print $1;}')" = 'port6i' ]; then
+                slow_down
+                HOST="$(echo "${line}" | awk '{print $2;}')"
+                PORT_NUMBER="$(echo "${line}" | awk '{print $3;}')"
+                if nc -6zw2 "${HOST}" "${PORT_NUMBER}" > /dev/null 2>&1; then
+                    send_error_to_log "[PORT][${PORT_NUMBER}][IPv6]" "${HOST}:${PORT_NUMBER}"
+                    if [ "${ARGUMENT_CLI}" -eq '1' ]; then
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv6" "${PORT_NUMBER}" "${HOST}"
+                    elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
+                        send_error_to_telegram "[PORT][IPv6]" "${HOST}:${PORT_NUMBER}"
+                    fi 
+                else
+                    if [ "${ARGUMENT_CLI}" -eq '1' ]; then
+                        printf "${FORMAT}" "[i]" "OK" "IPv6" "${PORT_NUMBER}" "${HOST}"
                     fi
                 fi
             fi
@@ -885,6 +1028,9 @@ feature_port() {
 }
 
 feature_http() {
+    # requires curl
+    requirement_curl
+
 	PROTOCOL_HTTP4='0'
     PROTOCOL_HTTP6='0'
     PROTOCOL_HTTPS4='0'
@@ -922,13 +1068,13 @@ feature_http() {
                 if !  curl -I -4 "${HOST}" 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     send_error_to_log "[HTTP][IPv4]" "http://${HOST}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "IPv4" "http://${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv4" "http://${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[HTTP][IPv4]" "http://${HOST}"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "IPv4" "http://${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv4" "http://${HOST}"
                     fi
                 fi
             fi
@@ -940,13 +1086,13 @@ feature_http() {
                 if !  curl -I -6 "${HOST}" 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     send_error_to_log "[HTTP][IPv6]" "http://${HOST}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "IPv6" "http://${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv6" "http://${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[HTTP][IPv6]" "http://${HOST}"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "IPv6" "http://${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv6" "http://${HOST}"
                     fi
                 fi
             fi
@@ -958,13 +1104,13 @@ feature_http() {
                 if !  curl -I -4 "${HOST}" 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     send_error_to_log "[HTTPS][IPv4]" "https://${HOST}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "IPv4" "https://${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv4" "https://${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[HTTPS][IPv4]" "https://${HOST}"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "IPv4" "https://${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv4" "https://${HOST}"
                     fi
                 fi
             fi
@@ -976,13 +1122,13 @@ feature_http() {
                 if !  curl -I -6 "${HOST}" 2>&1 | grep -w "200 OK\|301 Moved Permanently" > /dev/null; then
                     send_error_to_log "[HTTPS][IPv6]" "https://${HOST}"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "DOWN" "IPv6" "https://${HOST}"
+                        printf "${FORMAT}" "[!]" "ERROR" "IPv6" "https://${HOST}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[HTTPS][IPv6]" "https://${HOST}"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "UP" "IPv6" "https://${HOST}"
+                        printf "${FORMAT}" "[i]" "OK" "IPv6" "https://${HOST}"
                     fi
                 fi
             fi
@@ -1034,7 +1180,7 @@ feature_dns() {
             HEADER="\n %-5s %-8s %-8s %-36s %-20s\n"
             FORMAT=" %-5s %-8s %-8s %-36s %-20s\n"
             WIDTH="77"
-            printf "${HEADER}" "DNS" "STATUS" "TYPE" "DOMAIN NAME" "DNS CHECK"
+            printf "${HEADER}" "DNS" "STATUS" "TYPE" "DOMAIN" "DNS CHECK"
             printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
         fi
 		if [ "${PROTOCOL_DNS_A}" -eq '1' ]; then
@@ -1052,7 +1198,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "A" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "A" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1073,7 +1219,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "AAAA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "AAAA" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1094,7 +1240,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "CNAME" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "CNAME" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1115,7 +1261,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "TXT" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "TXT" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1136,7 +1282,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "MX" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "MX" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1157,7 +1303,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "NS" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "NS" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1178,7 +1324,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "SOA" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "SOA" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1199,7 +1345,7 @@ feature_dns() {
                         fi
                     else
                         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                            printf "${FORMAT}" "[i]" "MATCH" "PTR" "${DOMAIN_NAME}" "${DNS_CHECK}"
+                            printf "${FORMAT}" "[i]" "OK" "PTR" "${DOMAIN_NAME}" "${DNS_CHECK}"
                         fi
                     fi
                 fi
@@ -1209,6 +1355,9 @@ feature_dns() {
 }
 
 feature_tls() {
+    # requires curl
+    requirement_curl
+
 	PROTOCOL_TLS='0'
 
 	while read -r line; do
@@ -1220,17 +1369,17 @@ feature_tls() {
 	if [ "${PROTOCOL_TLS}" -eq '1' ]; then
         if [ "${ARGUMENT_CLI}" -eq '1' ]; then
             DIVIDER="============================================================================="
-            HEADER="\n %-5s %-8s %-36s %-8s\n"
-            FORMAT=" %-5s %-8s %-36s %-8s\n"
+            HEADER="\n %-5s %-8s %-8s %-36s\n"
+            FORMAT=" %-5s %-8s %-8s %-36s\n"
             WIDTH="77"
-            printf "${HEADER}" "TLS" "STATUS" "DOMAIN" "DAYS LEFT"
+            printf "${HEADER}" "TLS" "STATUS" "DAYS" "DOMAIN" 
             printf "%${WIDTH}.${WIDTH}s\n" "${DIVIDER}"
         fi
         while read -r line; do
             if [ "$(echo "${line}" | awk '{print $1;}')" = 'tls' ]; then
                 slow_down
                 DOMAIN_NAME="$(echo "${line}" | awk '{print $2;}')"
-                TLS_EXPIRATION_RAW="$(curl -vI --stderr - https://${DOMAIN_NAME} | grep "expire date" | sed 's/*//g' | sed 's/expire date: //g')"
+                TLS_EXPIRATION_RAW="$(curl -vI --insecure --stderr - https://${DOMAIN_NAME} | grep "expire date" | sed 's/*//g' | sed 's/expire date: //g')"
                 TLS_EXPIRATION_TIME="$(echo "${TLS_EXPIRATION_RAW}" | awk '{print $3;}')"
                 TLS_EXPIRATION_DAY="$(echo "${TLS_EXPIRATION_RAW}" | awk '{print $2;}')"
                 TLS_EXPIRATION_MONTH="$(echo "${TLS_EXPIRATION_RAW}" | awk '{print $1;}')"
@@ -1239,16 +1388,23 @@ feature_tls() {
                 CURRENT_EPOCH="$(date "+%s")"
                 REMAINING_TIME_SECONDS="$(( TLS_EXPIRATION_EPOCH - CURRENT_EPOCH ))"
                 REMAINING_TIME_DAYS="$(( REMAINING_TIME_SECONDS / 3600 / 24 ))"
-                if [ "${REMAINING_TIME_DAYS}" -le "${UPTIMEBOT_TLS_ALERT}" ]; then
+                if [ "${REMAINING_TIME_DAYS}" -lt '0' ]; then
+                    send_error_to_log "[TLS][EXPIRATION]" "${DOMAIN_NAME}" "expired in ${REMAINING_TIME_DAYS} days"
+                    if [ "${ARGUMENT_CLI}" -eq '1' ]; then
+                        printf "${FORMAT}" "[!]" "ERROR" "${REMAINING_TIME_DAYS}" "${DOMAIN_NAME}"
+                    elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
+                        send_error_to_telegram "[TLS][EXPIRATION]" "${DOMAIN_NAME}" "expired in ${REMAINING_TIME_DAYS} days"
+                    fi
+                elif [ "${REMAINING_TIME_DAYS}" -le "${UPTIMEBOT_TLS_ALERT}" ]; then
                     send_error_to_log "[TLS][EXPIRATION]" "${DOMAIN_NAME}" "in ${REMAINING_TIME_DAYS} days"
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[!]" "NOTICE" "${DOMAIN_NAME}" "${REMAINING_TIME_DAYS}"
+                        printf "${FORMAT}" "[!]" "NOTICE" "${REMAINING_TIME_DAYS}" "${DOMAIN_NAME}"
                     elif [ "${ARGUMENT_TELEGRAM}" -eq '1' ]; then
                         send_error_to_telegram "[TLS][EXPIRATION]" "${DOMAIN_NAME}" "expires in ${REMAINING_TIME_DAYS} days"
                     fi
                 else
                     if [ "${ARGUMENT_CLI}" -eq '1' ]; then
-                        printf "${FORMAT}" "[i]" "OK" "${DOMAIN_NAME}" "${REMAINING_TIME_DAYS}"
+                        printf "${FORMAT}" "[i]" "OK" "${REMAINING_TIME_DAYS}" "${DOMAIN_NAME}"
                     fi
                 fi
             fi
@@ -1274,6 +1430,8 @@ feature_all() {
 ####################################################################################################
 
 method_telegram() {
+    # requires curl
+    requirement_curl
     if [ "${METHOD_TELEGRAM}" = '1' ]; then
         TELEGRAM_URL="https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage"
 
@@ -1298,7 +1456,7 @@ uptimebot_main() {
     # when both a feature and method cli are given
 	if [ "${ARGUMENT_PING}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_ping_list
-    elif [ "${ARGUMENT_PING}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_PING}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_ping
     elif [ "${ARGUMENT_PING}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_ping
@@ -1306,7 +1464,7 @@ uptimebot_main() {
 		feature_ping
     elif [ "${ARGUMENT_PORT}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_port_list
-    elif [ "${ARGUMENT_PORT}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_PORT}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_port
     elif [ "${ARGUMENT_PORT}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_port
@@ -1314,7 +1472,7 @@ uptimebot_main() {
 		feature_port
     elif [ "${ARGUMENT_HTTP}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_http_list
-    elif [ "${ARGUMENT_HTTP}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_HTTP}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_http
     elif [ "${ARGUMENT_HTTP}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_http
@@ -1322,7 +1480,7 @@ uptimebot_main() {
 		feature_http
     elif [ "${ARGUMENT_DNS}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_dns_list
-    elif [ "${ARGUMENT_DNS}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_DNS}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_dns
     elif [ "${ARGUMENT_DNS}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_dns
@@ -1330,7 +1488,7 @@ uptimebot_main() {
 		feature_dns
     elif [ "${ARGUMENT_TLS}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_tls_list
-    elif [ "${ARGUMENT_TLS}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_TLS}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_tls
     elif [ "${ARGUMENT_TLS}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_tls
@@ -1338,7 +1496,7 @@ uptimebot_main() {
 		feature_tls
     elif [ "${ARGUMENT_TOR}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_tor_list
-    elif [ "${ARGUMENT_TOR}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_TOR}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_tor
     elif [ "${ARGUMENT_TOR}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_tor
@@ -1346,7 +1504,7 @@ uptimebot_main() {
 		feature_tor
     elif [ "${ARGUMENT_ALL}" = '1' ] && [ "${ARGUMENT_LIST}" = '1' ]; then
 		feature_all_list
-    elif [ "${ARGUMENT_ALL}" = '1' ] && [ "${ARGUMENT_LOGONLY}" = '1' ]; then
+    elif [ "${ARGUMENT_ALL}" = '1' ] && [ "${ARGUMENT_LOG}" = '1' ]; then
         feature_all
     elif [ "${ARGUMENT_ALL}" = '1' ] && [ "${ARGUMENT_CLI}" = '1' ]; then
         feature_all
@@ -1366,6 +1524,8 @@ uptimebot_main() {
 	elif [ "${ARGUMENT_TOR}" = '1' ]; then
         feature_tor_list
 	# options can not be used with a method or feature
+    elif [ "${ARGUMENT_CHECK}" = '1' ]; then
+        option_check
     elif [ "${ARGUMENT_CRON}" = '1' ]; then
         option_cron
     elif [ "${ARGUMENT_VERSION}" = '1' ]; then
