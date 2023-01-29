@@ -1,11 +1,11 @@
 #!/bin/sh
 
 #############################################################################
-# Version 1.0.0-RELEASE (26-04-2022)
+# Version 1.0.1-RELEASE (26-04-2022)
 #############################################################################
 
 #############################################################################
-# Copyright 2021-2022 Nozel/Sebas Veeke. Licenced under a Creative Commons
+# Copyright 2021-2023 Nozel/Sebas Veeke. Licenced under a Creative Commons
 # Attribution-NonCommercial-ShareAlike 4.0 International License.
 #
 # See https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -64,7 +64,7 @@ install_uptimebot() {
 
     # download uptimebot_targets.conf to /usr/local/etc/uptimebot_targets.conf and set ownership (root:wheel) and permissions (755)
     wget -q https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/uptimebot_targets.conf -O /usr/local/etc/uptimebot_targets.conf
-    chown root:wheel /usr/local/etc/uptimebot-targets.conf
+    chown root:wheel /usr/local/etc/uptimebot_targets.conf
     chmod 755 /usr/local/etc/uptimebot_targets.conf
 
     # check files

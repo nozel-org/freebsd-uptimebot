@@ -15,7 +15,7 @@ If you're looking for a simple monitoring tool that can be setup in less than a 
 There is a install script to get you started right away. This installs the files to the correct directories and sets ownership and permissions.
 ```
 wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/install_uptimebot
-sh install_uptimebot.sh
+sh install_uptimebot
 ```
 When installed, add a monitoring target to `/usr/local/etc/uptimebot_targets.conf` and fire away by running `uptimebot --all --cli`.
 
