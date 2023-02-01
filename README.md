@@ -49,6 +49,11 @@ For a full list of features, methods and options run `uptimebot --help`.
 If you have questions, suggestions or find bugs, please let us know via the issue tracker.
 
 ## Changelog
+### 1.4.1-RELEASE ([01-02-2023](https://github.com/nozel-org/freebsd-uptimebot/commit/db7d60190817e58197585c6d72f9467a5a756864))
+- Moved configuration files to /usr/local/etc/uptimebot.
+- Renamed uptimebot_targets.conf to targets.conf.
+- Replaced install script with botmanager.
+
 ### 1.4.0-RELEASE ([28-04-2022](https://github.com/nozel-org/freebsd-uptimebot/commit/51dba5a9b1ba660a47cfae408f71137162c7c985))
 - Renamed method logonly to log.
 - Made method list consistent with the method cli output.
