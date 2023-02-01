@@ -12,15 +12,22 @@ If you're looking for a simple monitoring tool that can be setup in less than a 
 * Automatic cronjob creation.
 
 ## Installing / Getting started
-There is a install script to get you started right away. This installs the files to the correct directories and sets ownership and permissions.
+You can install `uptimebot` with [botmanager](https://github.com/nozel-org/botmanager). Or manually as follows:
 ```
-wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/install_uptimebot
-sh install_uptimebot
+wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/uptimebot -O /usr/local/bin/uptimebot
+chown root:wheel /usr/local/bin/uptimebot
+chmod 555 /usr/local/bin/uptimebot
+wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/uptimebot.conf -O /usr/local/etc/uptimebot/uptimebot.conf
+chown root:wheel /usr/local/etc/uptimebot/uptimebot.conf
+chmod 755 /usr/local/etc/uptimebot/uptimebot.conf
+wget https://raw.githubusercontent.com/nozel-org/freebsd-uptimebot/master/targets.conf -O /usr/local/etc/uptimebot/targets.conf
+chown root:wheel /usr/local/etc/uptimebot/targets.conf
+chmod 755 /usr/local/etc/uptimebot/targets.conf
 ```
-When installed, add a monitoring target to `/usr/local/etc/uptimebot_targets.conf` and fire away by running `uptimebot --all --cli`.
+When installed, add a monitoring target to `/usr/local/etc/uptimebot/targets.conf` and fire away by running `uptimebot --all --cli`.
 
 ## Configuration
-General settings and automated tasks can be configured in `/usr/local/etc/uptimebot.conf`. Automated tasks can be effectuated with `uptimebot --cron`. Monitoring targets can be set in `/usr/local/etc/uptimebot_targets.conf`.
+General settings and automated tasks can be configured in `/usr/local/etc/uptimebot/uptimebot.conf`. Automated tasks can be effectuated with `uptimebot --cron`. Monitoring targets can be set in `/usr/local/etc/uptimebot/targets.conf.conf`.
 
 ## How to use
 `uptimebot` has **features**, **methods** and **options**. Options can be used standalone, but a feature always requires a method and vice versa. Some examples:"

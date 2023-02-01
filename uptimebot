@@ -1,11 +1,11 @@
 #!/bin/sh
 
 #############################################################################
-# Version 1.4.0-RELEASE (28-04-2022)
+# Version 1.4.1-RELEASE (01-02-2022)
 #############################################################################
 
 #############################################################################
-# Copyright 2021-2022 Nozel/Sebas Veeke. Licenced under a Creative Commons
+# Copyright 2021-2023 Nozel/Sebas Veeke. Licenced under a Creative Commons
 # Attribution-NonCommercial-ShareAlike 4.0 International License.
 #
 # See https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -20,10 +20,10 @@
 #############################################################################
 
 # uptimebot version
-UPTIMEBOT_VERSION='1.4.0'
+UPTIMEBOT_VERSION='1.4.1'
 
 # check whether uptimebot.conf is available and source it
-if [ -f /usr/local/etc/uptimebot.conf ]; then
+if [ -f /usr/local/etc/uptimebot/uptimebot.conf ]; then
     # populate all usable variables to have defaults and check validity later on
     UPTIMEBOT_LOG='0'
     UPTIMEBOT_DATABASE='0'
@@ -47,14 +47,14 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
     TELEGRAM_CHAT='0'
 
     # and source backupbot.conf
-    . /usr/local/etc/uptimebot.conf
+    . /usr/local/etc/uptimebot/uptimebot.conf
 
     # populate required variables when they are not set
     if [ "${UPTIMEBOT_LOG}" = '0' ]; then
         UPTIMEBOT_LOG="/var/log/uptimebot.log"
     fi
     if [ "${UPTIMEBOT_DATABASE}" = '0' ]; then
-        UPTIMEBOT_DATABASE="/usr/local/etc/uptimebot_targets.conf"
+        UPTIMEBOT_DATABASE="/usr/local/etc/uptimebot/targets.conf"
     fi
     if [ "${UPTIMEBOT_DELAY}" = '0' ]; then
         UPTIMEBOT_DELAY='0.5'
@@ -111,7 +111,7 @@ if [ -f /usr/local/etc/uptimebot.conf ]; then
     fi
 else
     UPTIMEBOT_LOG="/var/log/uptimebot.log"
-    UPTIMEBOT_DATABASE='/usr/local/etc/uptimebot_targets.conf'
+    UPTIMEBOT_DATABASE='/usr/local/etc/uptimebot/targets.conf'
     UPTIMEBOT_DELAY='0.5'
 fi
 
